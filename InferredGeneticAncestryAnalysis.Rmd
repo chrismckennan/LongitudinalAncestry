@@ -1,0 +1,47 @@
+---
+title: "Inferred genetic ancestry analysis"
+author: "Chris McKennan"
+date: "4/2/2019"
+output: pdf_document
+---
+
+The same as "ReportedRaceAnalysis.Rmd", except $A$ is each individual's inferred genetic ancestry (IGA, see Figure 1).
+
+#Libraries
+```{r Libraries}
+library(parallel)
+library(foreach)
+library(mvtnorm)
+```
+
+#Source Functions
+Make sure to change these paths when before running the code.
+```{r SourceFunctions}
+source("<path to>/EmpiricalBayes.R")
+source("<path to>/PosteriorProbabilities.R")
+```
+
+#Load data
+Make sure to change these paths when before running the code. SXX is the list of 2 x 2 SXX_g matrices, and SXY is a list of 2-vectors that contains SXY_g.
+```{r LoadData}
+load("<path to>/SummaryData_IGA.Rdata")  #Summary statistics necessary to run empirical Bayes and estimate the posterior distribution
+```
+
+#Analysis
+
+## Empirical Bayes
+out.EB$prior.pi contains the estimated prior
+out.EB$Post.probs is a 31 x 784484 matrix, where entry (k,g) is P(Methylation at CpG g was drawn from mixture k | Data). See the Supplement for more details.
+
+This code typically takes a long time to run.
+```{r EmpiricalBayes}
+var.vec <- c(0.05^2, 0.1^2, 0.15^2, 0.2^2, 0.25^2)  #A relatively dense grid of effect sizes tau_k^2 (see the Supplement for more detail) obtained from evaluating the effects sizes at birth and age 7 for CpG sites with small IGA-qvalues at birth and age 7. A similar technique is done in ASH (Stephens, 2016)
+rho.vec <- c(0, 1/3, 2/3, 1)    #The correlation coefficients rho_s (see the Supplement for more detail)
+out.EB <- EmBayesPi(SXX=SXX, SXY=SXY, max.iter=5e4, var.vec=var.vec, rho.vec=rho.vec, lambda=100)
+```
+
+## Get sign rates
+PPS stands for Posterior Probability for Signs, and is used to estimate the conserved and discordant sign rates in the reported race analysis. We provide a subset of this matrix to reproduce Figures 2 and 3. One can run this code with out.EB, which is stored in SummaryData_IGA.Rdata. By default, this script uses all but 1 core to fit the model.
+```{r SignRates}
+PPS <- PostProbs(SXX=SXX, SXY=SXY, Post=out.EB$Post.probs, var.vec=var.vec, rho.vec=rho.vec)
+```

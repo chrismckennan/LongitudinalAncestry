@@ -1,0 +1,63 @@
+---
+title: "Reported race joint analysis"
+author: "Chris McKennan"
+date: "4/2/2019"
+output: pdf_document
+---
+
+Here is the code to estimate the posterior distributions for $(\beta_g^{(0)}, \beta_g^{(7)})$ for each CpG $g =1,\ldots,p=784484$ in the reported race analysis. 
+
+Let $X = A \oplus A \in \mathbb{R}^{2n \times 2}$, where $A \in \mathbb{R}^n$ is each individual's reported race (Black=1, Hispanic=0). Also, let $y_g \in \mathbb{R}^{2n}$ be the methylation and $V_g = \sigma_g^2 I_{2n} + \delta_g^2 B$ be the covariance matrix for the $2n$ individuals at CpG $g$, where $B$ is a partition matrix that blocks samples by individuals. We describe how we estimate $\sigma_g^2$ and $\delta_g^2$ in the Supplement of the manuscript, and define $\hat{V}_g = \hat{\sigma}_g^2 I_{2n} + \hat{\delta}_g^2 B$. Lastly, let $P_M^{\perp}$ be the orthogonal projection matrix that project vectors onto the orthogonal complement of $M$. Our code uses as input the summary statistics
+\[
+SXX_g = X^TP_{\left[Z\,\hat{C}\right]}^{\perp} \left( P_{\left[Z\,\hat{C}\right]}^{\perp} \hat{V}_g P_{\left[Z\,\hat{C}\right]}^{\perp}\right)^{\dagger} P_{\left[Z\,\hat{C}\right]}^{\perp} X \in \mathbb{R}^{2 \times 2}
+\]
+and
+\[
+SXY_g = X^TP_{\left[Z\,\hat{C}\right]}^{\perp} \left( P_{\left[Z\,\hat{C}\right]}^{\perp} \hat{V}_g P_{\left[Z\,\hat{C}\right]}^{\perp}\right)^{\dagger} P_{\left[Z\,\hat{C}\right]}^{\perp} y_g \in \mathbb{R}^2.
+\]
+The matrix $Z$ contains observed nuisance parameters like the intercept and $\hat{C}$ is an estimate for the latent confounders. We estimated them with a method developed in arXiv:1808.05895v1 (which is currently under a second round revision with JASA: Theory and Methods). We remark that $SXX_g$ and $SXY_g$ are analogous to the univariate summary statistics used in ASH (Stephens, 2016), and that
+\[
+SXX_g^{-1} SXY_g, \quad SXX_g^{-1}
+\]
+are the generalized least squares estimate for the bivariate effect due to reported race and its estimated variance.
+
+#Libraries
+```{r Libraries}
+library(parallel)
+library(foreach)
+library(mvtnorm)
+```
+
+#Source Functions
+Make sure to change these paths when before running the code.
+```{r SourceFunctions}
+source("<path to>/EmpiricalBayes.R")
+source("<path to>/PosteriorProbabilities.R")
+```
+
+#Load data
+Make sure to change these paths when before running the code. SXX is the list of 2 x 2 SXX_g matrices, and SXY is a list of 2-vectors that contains SXY_g.
+```{r LoadData}
+load("<path to>/SummaryStat_ReportedRace.Rdata")  #Summary statistics necessary to run empirical Bayes and estimate the posterior distribution. These are provided with the manuscript.
+```
+
+#Analysis
+
+## Empirical Bayes
+out.EB$prior.pi contains the estimated prior
+out.EB$Post.probs is a 31 x 784484 matrix, where entry (k,g) is P(Methylation at CpG g was drawn from mixture k | Data). See the Supplement for more details
+
+This code takes a long time to run.
+```{r EmpiricalBayes}
+var.vec <- c(0.1^2, (0.1 * 3/2)^2, (0.15 * 3/2)^2, (0.2 * 3/2)^2, (0.25 * 3/2)^2)   #A relatively dense grid of effect sizes tau_k^2 (see the Supplement for more detail) obtained from evaluating the effects sizes at birth and age 7 for CpG sites with small RR-qvalues at birth and age 7. A similar technique is done in ASH (Stephens, 2016)
+rho.vec <- c(0, 1/3, 2/3, 1)    #The correlation coefficients rho_s (see the Supplement for more detail)
+out.EB <- EmBayesPi(SXX=SXX, SXY=SXY, max.iter=5e4, var.vec=var.vec, rho.vec=rho.vec, lambda=100)
+```
+
+## Get sign rates
+PPS stands for Posterior Probability for Signs, and is used to estimate the conserved and discordant sign rates in the reported race analysis.
+
+By default, the function PostProbs using all but 1 core to determine the posterior sign rates.
+```{r SignRates}
+PPS <- PostProbs(SXX=SXX, SXY=SXY, Post=out.EB$Post.probs, var.vec=var.vec, rho.vec=rho.vec)
+```
